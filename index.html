@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manga Studio AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dark: '#121212',
+                        darker: '#0a0a0a',
+                        card: '#1e1e1e',
+                        primary: '#8b5cf6', 
+                        success: '#03dac6',
+                        warning: '#ffb74d'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #1e1e1e; }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+    </style>
+</head>
+<body class="bg-darker text-gray-200 h-screen overflow-hidden flex font-sans">
+
+    <aside class="w-80 bg-card border-r border-gray-800 flex flex-col h-full shadow-2xl z-10 shrink-0">
+        
+        <div class="p-6 border-b border-gray-800 bg-darker/50">
+            <h1 class="text-2xl font-bold text-primary flex items-center gap-2 tracking-tight">
+                <span>🏯</span> Manga AI
+            </h1>
+        </div>
+
+        <div class="p-4 bg-dark/30 border-b border-gray-800">
+            <div class="space-y-3">
+                <label class="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Novo Download</label>
+                
+                <input type="text" id="url" placeholder="Cole a URL do capítulo..." oninput="autoPreencher()" 
+                    class="w-full bg-dark border border-gray-700 rounded p-2 text-xs focus:border-primary focus:outline-none transition text-white placeholder-gray-600">
+                
+                <input type="text" id="selector" value="#readerarea img" placeholder="Seletor CSS (Padrão: #readerarea img)" 
+                    class="w-full bg-dark border border-gray-700 rounded p-2 text-[11px] text-gray-400 focus:text-white focus:border-primary focus:outline-none transition" 
+                    title="Seletor CSS para encontrar as imagens">
+
+                <div class="flex gap-2">
+                    <input type="text" id="siteName" placeholder="Obra" class="w-1/2 bg-dark border border-gray-700 rounded p-2 text-xs text-gray-300">
+                    <input type="text" id="chapterName" placeholder="Cap." class="w-1/2 bg-dark border border-gray-700 rounded p-2 text-xs text-gray-300">
+                </div>
+
+                <button onclick="baixarETraduzir()" id="btnDownload"
+                    class="w-full bg-primary hover:bg-violet-700 text-white font-bold py-2.5 rounded text-xs transition shadow-lg shadow-violet-900/20 flex justify-center items-center gap-2">
+                    <span>🚀</span> Baixar e Traduzir
+                </button>
+                
+                <div id="statusMsg" class="text-[10px] text-center min-h-[16px]"></div>
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-4 custom-scroll">
+            <div class="flex justify-between items-end mb-4 px-1">
+                <h2 class="text-[10px] font-bold uppercase text-gray-500 tracking-wider">Biblioteca Local</h2>
+                <button onclick="carregarBiblioteca()" class="text-[10px] text-primary hover:text-white transition">⟳ Atualizar</button>
+            </div>
+            
+            <div id="libraryList" class="space-y-3">
+                </div>
+        </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col h-full relative bg-dark">
+        
+        <header class="h-14 border-b border-gray-800 flex justify-between items-center px-6 bg-card/80 backdrop-blur z-20">
+            <div>
+                <h2 id="currentTitle" class="text-sm font-bold text-gray-100 uppercase tracking-wide">Selecione um capítulo</h2>
+                <p id="currentMode" class="text-[10px] text-gray-500">--</p>
+            </div>
+        </header>
+
+        <div id="imageContainer" class="flex-1 overflow-y-auto p-4 text-center scroll-smooth bg-[#0a0a0a]">
+            <div class="flex flex-col items-center justify-center h-full text-gray-700">
+                <svg class="w-12 h-12 mb-3 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+                <p class="text-sm">Use o menu lateral para ler.</p>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        let estadoAtual = { obra: null, capitulo: null, modo: null };
+
+        window.onload = () => carregarBiblioteca();
+
+        async function carregarBiblioteca() {
+            const listEl = document.getElementById('libraryList');
+            try {
+                const res = await fetch('http://localhost:3000/library');
+                const library = await res.json();
+                listEl.innerHTML = '';
+
+                if (library.length === 0) return listEl.innerHTML = '<p class="text-xs text-gray-600 text-center mt-10">Biblioteca vazia.</p>';
+
+                library.forEach(obra => {
+                    const details = document.createElement('details');
+                    details.className = "group open:bg-white/5 rounded-lg transition-colors duration-200";
+                    
+                    const summary = document.createElement('summary');
+                    summary.className = "cursor-pointer p-3 text-sm font-medium select-none flex justify-between items-center text-gray-300 hover:text-white outline-none";
+                    summary.innerHTML = `
+                        <span class="truncate capitalize">${obra.name.replace(/_/g, ' ')}</span>
+                        <span class="text-[10px] bg-dark px-2 py-0.5 rounded-full text-gray-500 border border-gray-700">${obra.chapters.length}</span>
+                    `;
+
+                    const ul = document.createElement('ul');
+                    ul.className = "px-3 pb-3 space-y-2 mt-1";
+
+                    obra.chapters.forEach(cap => {
+                        const li = document.createElement('li');
+                        li.className = "bg-darker border border-gray-800 rounded p-2 flex flex-col gap-2";
+
+                        const capTitle = document.createElement('div');
+                        capTitle.className = "text-[11px] font-bold text-gray-500 uppercase tracking-wide";
+                        capTitle.innerText = `Capítulo ${cap.name}`;
+
+                        const btnGroup = document.createElement('div');
+                        btnGroup.className = "grid grid-cols-2 gap-2";
+
+                        const btnOrig = document.createElement('button');
+                        btnOrig.className = "text-[10px] py-1.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center justify-center gap-1";
+                        btnOrig.innerHTML = `<span>🇯🇵</span> Original`;
+                        btnOrig.onclick = () => abrirCapitulo(obra.name, cap.name, 'original');
+
+                        const btnTrans = document.createElement('button');
+                        if (cap.hasTranslation) {
+                            btnTrans.className = "text-[11px] py-1.5 rounded bg-green-900/30 hover:bg-green-600 border border-green-900/50 hover:border-green-500 text-green-400 hover:text-white transition flex items-center justify-center gap-1 font-bold";
+                            btnTrans.innerHTML = `<span>🇧🇷</span> Traduzido`;
+                            btnTrans.onclick = () => abrirCapitulo(obra.name, cap.name, 'translated');
+                        } else {
+                            btnTrans.className = "text-[11px] py-1.5 rounded bg-gray-900 text-gray-700 border border-gray-800 cursor-not-allowed flex items-center justify-center gap-1";
+                            btnTrans.innerHTML = `<span>🇧🇷</span> ...`;
+                            btnTrans.disabled = true;
+                            btnTrans.title = "Ainda não traduzido";
+                        }
+
+                        btnGroup.appendChild(btnOrig);
+                        btnGroup.appendChild(btnTrans);
+                        li.appendChild(capTitle);
+                        li.appendChild(btnGroup);
+                        ul.appendChild(li);
+                    });
+
+                    details.appendChild(summary);
+                    details.appendChild(ul);
+                    listEl.appendChild(details);
+                });
+
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function abrirCapitulo(obra, capitulo, modo) {
+            estadoAtual = { obra, capitulo, modo };
+            
+            document.getElementById('currentTitle').innerText = `${obra.replace(/_/g, ' ')} - CAPÍTULO ${capitulo}`;
+            document.getElementById('currentMode').innerHTML = modo === 'translated' 
+                ? '<span class="text-green-400 font-bold">LENDO: 🇧🇷 TRADUZIDO</span>' 
+                : '<span class="text-blue-400 font-bold">LENDO: 🇯🇵 ORIGINAL</span>';
+
+            carregarImagens();
+        }
+
+        async function carregarImagens() {
+            const container = document.getElementById('imageContainer');
+            container.innerHTML = '<div class="mt-10 text-primary animate-pulse">Carregando páginas...</div>';
+
+            try {
+                const res = await fetch('http://localhost:3000/get-images', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        siteName: estadoAtual.obra,
+                        chapterName: estadoAtual.capitulo,
+                        type: estadoAtual.modo
+                    })
+                });
+
+                const data = await res.json();
+                container.innerHTML = '';
+
+                if (!data.success) {
+                    container.innerHTML = `
+                        <div class="mt-10 text-center">
+                            <p class="text-red-400 mb-2">Imagens não encontradas.</p>
+                            ${estadoAtual.modo === 'translated' ? '<p class="text-xs text-gray-500">Talvez a tradução ainda não tenha terminado.</p>' : ''}
+                        </div>`;
+                    return;
+                }
+
+                const folderName = estadoAtual.modo === 'translated' ? 'traduzido' : 'original';
+                
+                data.images.forEach(imgName => {
+                    const img = document.createElement('img');
+                    img.src = `/arquivos/${estadoAtual.obra}/${estadoAtual.capitulo}/${folderName}/${imgName}`;
+                    img.className = "max-w-full md:max-w-2xl mx-auto shadow-lg mb-2 rounded border border-gray-800";
+                    img.loading = "lazy";
+                    container.appendChild(img);
+                });
+
+            } catch (e) {
+                container.innerHTML = '<p class="text-red-500 mt-10">Erro de conexão.</p>';
+            }
+        }
+
+        function autoPreencher() {
+            const url = document.getElementById('url').value;
+            if (!url) return;
+            const regex = /\/([a-zA-Z0-9-]+)-chapter-(\d+)/;
+            const match = url.match(regex);
+            if (match) {
+                document.getElementById('siteName').value = match[1].replace(/-/g, '_');
+                document.getElementById('chapterName').value = match[2];
+            }
+        }
+
+        async function baixarETraduzir() {
+            const btn = document.getElementById('btnDownload');
+            const status = document.getElementById('statusMsg');
+            const url = document.getElementById('url').value;
+            // AQUI PEGAMOS O SELETOR DO INPUT
+            const selector = document.getElementById('selector').value; 
+            const siteName = document.getElementById('siteName').value;
+            const chapterName = document.getElementById('chapterName').value;
+
+            if(!url || !siteName || !chapterName) return alert("Preencha URL e campos!");
+
+            btn.disabled = true;
+            btn.classList.add('opacity-50', 'cursor-not-allowed');
+            status.innerHTML = '<span class="text-blue-400 animate-pulse">⏳ Processando...</span>';
+
+            try {
+                // AGORA ENVIAMOS O SELETOR NO JSON
+                const res = await fetch('http://localhost:3000/scrape', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url, siteName, chapterName, selector })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    status.innerHTML = '<span class="text-green-400 font-bold">✅ Sucesso! Traduzindo...</span>';
+                    setTimeout(() => {
+                        carregarBiblioteca();
+                        btn.disabled = false;
+                        btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                        status.innerHTML = '';
+                    }, 3000);
+                } else {
+                    status.innerHTML = `<span class="text-red-500">${data.error}</span>`;
+                    btn.disabled = false;
+                }
+            } catch (e) {
+                status.innerHTML = `<span class="text-red-500">Erro.</span>`;
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
