@@ -6,102 +6,147 @@
     <title>Manga AI Reader</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['Inter', 'sans-serif'] },
-                    colors: {
-                        bg: '#050505', surface: '#0f0f0f', border: '#27272a',
-                        primary: '#8b5cf6', primaryHover: '#7c3aed', accent: '#a78bfa',
-                    }
-                }
-            }
-        }
-    </script>
-    <link rel="stylesheet" href="style.css">
+    <script src="scripts/tailwind_script.js"></script>
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .markdown-body strong { color: #a78bfa; font-weight: 700; }
+        .markdown-body li { margin-bottom: 0.5rem; }
+    </style>
 </head>
 <body class="bg-bg text-zinc-300 h-screen overflow-hidden flex text-sm antialiased selection:bg-primary selection:text-white">
 
     <div id="toast-container" class="fixed top-6 right-6 z-50 flex flex-col gap-3 pointer-events-none"></div>
 
+    <dialog id="aiModal" class="bg-surface/95 backdrop-blur-2xl border border-primary/30 rounded-xl shadow-2xl p-0 w-[600px] max-w-[90vw] text-zinc-200 backdrop:bg-black/80">
+        <div class="p-5 border-b border-border flex justify-between items-center bg-zinc-900/50">
+            <h3 class="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary to-purple-400">✨ Sugestões da IA</h3>
+            <button onclick="document.getElementById('aiModal').close()" class="text-zinc-500 hover:text-white">✕</button>
+        </div>
+        <div id="aiContent" class="p-6 overflow-y-auto max-h-[70vh] markdown-body leading-relaxed"></div>
+    </dialog>
+
     <aside class="w-72 bg-surface/80 backdrop-blur-xl border-r border-border flex flex-col h-full shrink-0 relative z-20">
-        
-        <div class="h-14 flex items-center px-5 border-b border-border">
+        <div class="h-14 flex items-center px-5 border-b border-border justify-between">
             <div class="flex items-center gap-2.5">
                 <div class="w-6 h-6 rounded bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center text-xs text-white font-bold shadow-lg shadow-primary/20">M</div>
                 <span class="font-semibold text-white tracking-tight">Manga AI</span>
-                <span class="text-[10px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded border border-zinc-700 ml-1">v2.1</span>
             </div>
         </div>
 
-        <div class="p-4 border-b border-border bg-zinc-900/30">
-            <div class="space-y-3">
-                <div class="flex justify-between items-center">
-                    <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Adicionar</label>
-                    <span id="loading-indicator" class="text-[10px] text-primary hidden animate-pulse font-medium">Processando...</span>
-                </div>
+        <div class="px-3 pt-3">
+            <button onclick="pedirSugestoesIA()" class="w-full bg-gradient-to-r from-zinc-800 to-zinc-900 hover:from-primary/20 hover:to-purple-900/20 border border-zinc-700/50 hover:border-primary/50 text-zinc-300 hover:text-white py-2 rounded-lg text-xs font-medium transition-all shadow-sm flex items-center justify-center gap-2 group">
+                <span class="group-hover:scale-110 transition-transform">✨</span> Pedir Recomendações
+            </button>
+        </div>
 
-                <div class="relative group">
-                    <input type="text" id="url" placeholder="Cole a URL do capítulo..." oninput="autoPreencher()" 
-                        class="w-full bg-zinc-800/50 border border-zinc-700 rounded-md py-2 pl-3 pr-8 text-xs text-white placeholder-zinc-600 focus:border-primary focus:ring-1 focus:ring-primary focus:bg-zinc-800 outline-none transition-all">
-                    <div class="absolute right-2 top-2 text-zinc-600">🔗</div>
-                </div>
+        <div class="p-3 border-b border-border bg-zinc-900/50">
+            <div class="space-y-2">
+                <details class="group bg-zinc-900/40 border border-zinc-800 rounded-lg overflow-hidden transition-all duration-300 open:ring-1 open:ring-primary/20">
+                    <summary class="list-none flex justify-between items-center cursor-pointer p-3 bg-zinc-800/30 hover:bg-zinc-800/80 transition-colors select-none">
+                        <span class="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Capítulo Único</span>
+                        <svg class="w-3 h-3 text-zinc-500 transition-transform duration-300 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                    </summary>
+                    <div class="p-3 space-y-3 border-t border-zinc-800/50">
+                        <div class="flex justify-between items-center h-4">
+                            <span class="text-[9px] text-zinc-600">Cole o link abaixo</span>
+                            <span id="loading-indicator" class="text-[9px] text-primary hidden animate-pulse font-bold">Processando...</span>
+                        </div>
+                        <div class="relative group/input">
+                            <input type="text" id="url" placeholder="https://..." oninput="autoPreencher()" class="w-full bg-black/40 border border-zinc-700/50 rounded-md py-2 pl-8 pr-2 text-xs text-white placeholder-zinc-600 focus:border-primary focus:ring-1 focus:ring-primary/50 focus:bg-zinc-900 outline-none transition-all">
+                            <div class="absolute left-2.5 top-2 text-zinc-600 group-focus-within/input:text-primary transition-colors">🔗</div>
+                        </div>
+                        <input type="text" id="selector" value="#readerarea img" placeholder="Seletor" class="w-full bg-transparent border-b border-zinc-800 py-1 px-1 text-[10px] text-zinc-500 focus:text-zinc-300 focus:border-primary/50 outline-none transition-colors">
+                        <div class="flex gap-2">
+                            <input type="text" id="siteName" placeholder="Obra" class="w-2/3 bg-black/20 border border-zinc-700/50 rounded-md py-1.5 px-2 text-xs text-zinc-300 focus:border-primary focus:bg-zinc-900 outline-none transition-all">
+                            <input type="text" id="chapterName" placeholder="Cap." class="w-1/3 bg-black/20 border border-zinc-700/50 rounded-md py-1.5 px-2 text-xs text-zinc-300 text-center focus:border-primary focus:bg-zinc-900 outline-none transition-all">
+                        </div>
+                        <button onclick="baixarCapitulo()" id="btnDownload" class="w-full bg-white text-black hover:bg-zinc-200 active:scale-95 font-semibold py-2 rounded-md text-xs transition-all shadow-lg flex justify-center items-center gap-2">Baixar Imagens</button>
+                    </div>
+                </details>
 
-                <input type="text" id="selector" value="#readerarea img" placeholder="Seletor CSS" 
-                    class="w-full bg-transparent border-b border-zinc-800 py-1 px-1 text-[10px] text-zinc-500 focus:text-zinc-300 focus:border-zinc-600 outline-none transition-colors"
-                    title="Seletor CSS (Opcional)">
-
-                <div class="flex gap-2">
-                    <input type="text" id="siteName" placeholder="Nome da Obra" class="w-1/2 bg-zinc-800/50 border border-zinc-700 rounded-md py-1.5 px-3 text-xs text-white focus:border-primary outline-none transition-all">
-                    <input type="text" id="chapterName" placeholder="Cap." class="w-14 bg-zinc-800/50 border border-zinc-700 rounded-md py-1.5 px-3 text-xs text-white focus:border-primary outline-none transition-all text-center">
-                </div>
-
-                <div class="relative">
-                    <input type="text" id="translatorType" value="gemini" placeholder="Motor (ex: gemini, google)" 
-                        class="w-full bg-zinc-800/50 border border-zinc-700 rounded-md py-1.5 px-3 text-xs text-white focus:border-primary outline-none transition-all"
-                        title="Motor de Tradução (gemini, google, etc)">
-                    <div class="absolute right-2 top-2 text-[10px] text-zinc-600 pointer-events-none">ENGINE</div>
-                </div>
-                
-                <button onclick="baixarCapitulo()" id="btnDownload"
-                    class="w-full bg-white text-black hover:bg-zinc-200 font-medium py-2 rounded-md text-xs transition-all shadow active:scale-95 flex justify-center items-center gap-2">
-                    <span>Baixar Imagens</span>
-                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
-                </button>
+                <details class="group bg-zinc-900/20 border border-zinc-800 rounded-lg overflow-hidden transition-all duration-300">
+                    <summary class="list-none flex justify-between items-center cursor-pointer p-3 bg-transparent hover:bg-zinc-800/50 transition-colors select-none">
+                        <span class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider group-hover:text-purple-400">Obra Completa</span>
+                        <svg class="w-3 h-3 text-zinc-600 transition-transform duration-300 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                    </summary>
+                    <div class="p-3 space-y-3 border-t border-zinc-800 bg-black/20">
+                        <div class="relative group/bulk">
+                            <input type="text" id="seriesUrl" placeholder="URL da Obra..." class="w-full bg-black/40 border border-purple-900/30 rounded-md py-2 pl-8 pr-2 text-xs text-white placeholder-zinc-600 focus:border-purple-500 focus:ring-1 focus:ring-purple-500/50 outline-none transition-all">
+                            <div class="absolute left-2.5 top-2 text-zinc-600 group-focus-within/bulk:text-purple-500 transition-colors">📚</div>
+                        </div>
+                        <input type="text" id="seriesSelector" value="#chapterlist a" placeholder="Seletor Lista" class="w-full bg-transparent border-b border-zinc-800 py-1 px-1 text-[10px] text-zinc-500 focus:text-zinc-300 focus:border-purple-500/50 outline-none transition-colors">
+                        <div id="bulkProgressArea" class="hidden space-y-1.5 bg-zinc-900 p-2 rounded border border-zinc-800">
+                            <div class="flex justify-between text-[9px] text-zinc-400 font-medium">
+                                <span id="bulkStatusText">Iniciando...</span>
+                                <span id="bulkCounter" class="text-white">0/0</span>
+                            </div>
+                            <div class="w-full bg-zinc-800 rounded-full h-1"><div id="bulkProgressBar" class="bg-gradient-to-r from-purple-500 to-pink-500 h-1 rounded-full transition-all duration-300" style="width: 0%"></div></div>
+                        </div>
+                        <button onclick="iniciarBulkDownload()" id="btnBulk" class="w-full bg-zinc-800 hover:bg-purple-500/10 hover:text-purple-400 hover:border-purple-500/30 text-zinc-400 border border-zinc-700 font-medium py-2 rounded-md text-xs transition-all flex justify-center items-center gap-2 active:scale-95">Buscar e Baixar Tudo</button>
+                    </div>
+                </details>
             </div>
         </div>
 
         <div class="flex-1 overflow-y-auto p-3">
             <div class="flex justify-between items-center mb-3 px-1">
                 <h2 class="text-[10px] font-bold uppercase text-zinc-500 tracking-widest">Sua Biblioteca</h2>
-                <button onclick="carregarBiblioteca()" class="text-zinc-500 hover:text-white transition p-1 rounded hover:bg-zinc-800">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-                </button>
+                <button onclick="carregarBiblioteca()" class="text-zinc-500 hover:text-white transition p-1 rounded hover:bg-zinc-800">↻</button>
             </div>
-            
             <div id="libraryList" class="space-y-1"></div>
         </div>
     </aside>
 
     <main class="flex-1 flex flex-col h-full relative bg-bg">
-        <header class="absolute top-0 left-0 right-0 h-14 bg-bg/80 backdrop-blur-md border-b border-border flex justify-between items-center px-6 z-30 transition-all duration-300">
-            <div class="flex flex-col justify-center">
-                <h2 id="currentTitle" class="text-sm font-medium text-white tracking-wide truncate max-w-2xl">Selecione uma obra</h2>
-                <div id="currentStatus" class="flex items-center gap-2 h-4"><span class="text-[10px] text-zinc-500">Pronto para ler</span></div>
+        
+        <header class="absolute top-0 left-0 right-0 h-14 bg-bg/90 backdrop-blur-md border-b border-border flex justify-between items-center px-6 z-30">
+            <div class="flex flex-col justify-center overflow-hidden">
+                <h2 id="currentTitle" class="text-sm font-medium text-white tracking-wide truncate max-w-xl">Selecione uma obra</h2>
+                <div id="currentStatus" class="flex items-center gap-2 h-4"><span class="text-[10px] text-zinc-500">--</span></div>
             </div>
-            <div class="flex items-center gap-3">
-                <div class="text-[10px] text-zinc-600 border border-zinc-800 rounded px-2 py-1 bg-zinc-900 hidden md:block">Pressione <kbd class="font-sans text-zinc-400 font-bold">/</kbd> para focar na URL</div>
+            <div class="flex bg-zinc-900 p-1 rounded-lg border border-zinc-800">
+                <button onclick="mudarModoLeitura('webtoon')" id="btnWebtoon" class="px-3 py-1 rounded text-[10px] font-medium transition-all bg-zinc-700 text-white shadow">📜 Webtoon</button>
+                <button onclick="mudarModoLeitura('page')" id="btnPage" class="px-3 py-1 rounded text-[10px] font-medium transition-all text-zinc-500 hover:text-zinc-300">📖 Página</button>
             </div>
         </header>
 
-        <div id="imageContainer" class="flex-1 overflow-y-auto pt-20 pb-10 px-4 md:px-0 text-center scroll-smooth">
+        <div id="imageContainer" class="flex-1 overflow-y-auto pt-14 px-0 text-center scroll-smooth relative outline-none cursor-grab active:cursor-grabbing" tabindex="0">
             <div class="flex flex-col items-center justify-center h-full text-zinc-700 gap-4 opacity-50">
                 <svg class="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
                 <p class="text-sm font-light">Sua biblioteca está à esquerda.</p>
             </div>
         </div>
+
+        <div class="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-4">
+            
+            <div id="pageControls" class="hidden bg-zinc-900/90 backdrop-blur border border-zinc-700 rounded-full px-2 py-1.5 flex items-center gap-2 shadow-2xl">
+                <button onclick="mudarPagina(-1)" class="w-8 h-8 flex items-center justify-center hover:bg-zinc-700 rounded-full text-white transition disabled:opacity-50">←</button>
+                <span id="pageCounter" class="text-xs font-mono text-primary min-w-[50px] text-center">1 / ?</span>
+                <button onclick="mudarPagina(1)" class="w-8 h-8 flex items-center justify-center hover:bg-zinc-700 rounded-full text-white transition disabled:opacity-50">→</button>
+            </div>
+
+            <div class="bg-zinc-900/90 backdrop-blur border border-zinc-700 rounded-full px-3 py-1.5 flex items-center gap-3 shadow-2xl">
+                <button onclick="ajustarZoom(-2)" class="text-zinc-400 hover:text-white transition" title="Diminuir Zoom">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/></svg>
+                </button>
+                
+                <div class="flex items-center gap-2 w-32">
+                    <input type="range" id="zoomSlider" min="10" max="300" value="100" 
+                        class="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-primary"
+                        oninput="aplicarZoom(this.value)">
+                </div>
+
+                <button onclick="ajustarZoom(2)" class="text-zinc-400 hover:text-white transition" title="Aumentar Zoom">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                </button>
+                
+                <span id="zoomValue" class="text-[10px] text-zinc-500 font-mono min-w-[35px] text-right">100%</span>
+                
+                <button onclick="resetarZoom()" class="text-[10px] text-zinc-600 hover:text-primary transition border border-zinc-800 hover:border-primary px-1.5 rounded" title="Resetar">R</button>
+            </div>
+
+        </div>
     </main>
-    <script src="script.js"></script>
+    <script src="scripts/script.js"></script>
 </body>
 </html>
