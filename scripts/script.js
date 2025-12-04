@@ -10,7 +10,12 @@ let estadoAtual = {
     zoomLevel: 20 
 };
 
-window.onload = () => { carregarBiblioteca(); setupAtalhos(); };
+
+window.onload = () => {
+    carregarBiblioteca();
+    setupAtalhos();
+    setInterval(carregarBiblioteca, 20000);
+};
 
 // --- IA ---
 async function pedirSugestoesIA() {
@@ -129,29 +134,7 @@ function renderizarImagens() {
 }
 
 // --- ATALHOS DE TECLADO ---
-function setupAtalhos() {
-    document.addEventListener('keydown', (e) => {
-        // Se estiver focado num input, ignora atalhos
-        if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
 
-        // Navegação Page Mode
-        if (estadoAtual.viewMode === 'page') {
-            if (e.key === 'ArrowRight' || e.key === 'd') mudarPagina(1);
-            if (e.key === 'ArrowLeft' || e.key === 'a') mudarPagina(-1);
-        }
-
-        // Zoom (+ e -)
-        if (e.key === '+' || e.key === '=') ajustarZoom(2);
-        if (e.key === '-' || e.key === '_') ajustarZoom(-2);
-        if (e.key === '0') resetarZoom();
-
-        // Atalho URL
-        if (e.key === '/') {
-            e.preventDefault();
-            document.getElementById('url').focus();
-        }
-    });
-}
 
 // --- MODOS DE LEITURA ---
 function mudarModoLeitura(modo) {
@@ -203,12 +186,30 @@ async function carregarBiblioteca() {
 
             obra.chapters.forEach(cap => {
                 const li = document.createElement('li');
-                li.className = "fade-in bg-zinc-800/40 hover:bg-zinc-800 border border-zinc-700/50 hover:border-zinc-600 rounded p-2 flex flex-col gap-2 group/item transition-all";
+                
+                // 1. Cria um ID único sanitizado para o elemento
+                const safeObra = obra.name.replace(/\s+/g, '_');
+                const safeCap = cap.name.replace(/\./g, '-');
+                const elementId = `chap-${obra.domain}-${safeObra}-${safeCap}`;
+                li.id = elementId;
+
+                // 2. Define classes Base e Ativa
+                const baseClass = "fade-in rounded p-2 flex flex-col gap-2 group/item transition-all border";
+                // Se for o atual, usa as cores de destaque (Primary), senão usa o padrão (Zinc)
+                const isCurrent = estadoAtual.obra === obra.name && estadoAtual.capitulo === cap.name;
+                
+                const activeClass = "bg-primary/10 border-primary shadow-[0_0_15px_rgba(139,92,246,0.15)] ring-1 ring-primary/30";
+                const inactiveClass = "bg-zinc-800/40 hover:bg-zinc-800 border-zinc-700/50 hover:border-zinc-600";
+
+                li.className = `${baseClass} ${isCurrent ? activeClass : inactiveClass}`;
+
+                // ... (o resto do conteúdo do innerHTML continua igual) ...
                 let transBtnHtml = cap.hasTranslation 
                     ? `<button onclick="abrirCapitulo('${obra.domain}', '${obra.name}', '${cap.name}', 'translated')" class="flex-1 text-[10px] py-1 rounded transition border bg-primary/10 hover:bg-primary/20 border-primary/30 text-primary hover:text-white font-semibold">Ler Traduzido</button>`
                     : `<button onclick="traduzirCapitulo(this, '${obra.domain}', '${obra.name}', '${cap.name}')" class="flex-1 text-[10px] py-1 rounded transition border bg-zinc-900 hover:bg-primary hover:text-white border-zinc-700 text-zinc-400 font-medium flex justify-center items-center gap-1 group/trans"><span>✨</span> Traduzir</button>`;
                 
-                li.innerHTML = `<div class="flex justify-between items-center"><div class="flex items-center gap-1.5"><div class="w-1 h-1 rounded-full ${cap.hasTranslation ? 'bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.5)]' : 'bg-zinc-600'}"></div><span class="text-[10px] font-bold text-zinc-400 uppercase tracking-wide">Cap. ${cap.name}</span></div><button onclick="excluirCapitulo(event, '${obra.domain}', '${obra.name}', '${cap.name}')" class="text-zinc-600 hover:text-red-400 transition opacity-0 group-hover/item:opacity-100 p-1" title="Apagar"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button></div><div class="flex gap-1.5"><button onclick="abrirCapitulo('${obra.domain}', '${obra.name}', '${cap.name}', 'original')" class="flex-1 text-[10px] py-1 rounded bg-zinc-900 hover:bg-zinc-700 text-zinc-400 hover:text-white border border-zinc-700 transition">Original</button>${transBtnHtml}</div>`;
+                li.innerHTML = `<div class="flex justify-between items-center"><div class="flex items-center gap-1.5"><div class="w-1 h-1 rounded-full ${cap.hasTranslation ? 'bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.5)]' : 'bg-zinc-600'}"></div><span class="text-[10px] font-bold text-zinc-400 uppercase tracking-wide group-hover/item:text-zinc-200 transition-colors">Cap. ${cap.name}</span></div><button onclick="excluirCapitulo(event, '${obra.domain}', '${obra.name}', '${cap.name}')" class="text-zinc-600 hover:text-red-400 transition opacity-0 group-hover/item:opacity-100 p-1" title="Apagar"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button></div><div class="flex gap-1.5"><button onclick="abrirCapitulo('${obra.domain}', '${obra.name}', '${cap.name}', 'original')" class="flex-1 text-[10px] py-1 rounded bg-zinc-900 hover:bg-zinc-700 text-zinc-400 hover:text-white border border-zinc-700 transition">Original</button>${transBtnHtml}</div>`;
+                
                 ul.appendChild(li);
             });
             details.appendChild(summary);
@@ -218,9 +219,38 @@ async function carregarBiblioteca() {
     } catch (e) { console.error(e); showToast('Erro ao carregar biblioteca.', 'error'); }
 }
 
+function destacarCapituloAtual() {
+    // Classes de Estilo
+    const activeClasses = ["bg-primary/10", "border-primary", "shadow-[0_0_15px_rgba(139,92,246,0.15)]", "ring-1", "ring-primary/30"];
+    const inactiveClasses = ["bg-zinc-800/40", "hover:bg-zinc-800", "border-zinc-700/50", "hover:border-zinc-600"];
+
+    // 1. Remove destaque de TODOS os itens da lista
+    document.querySelectorAll('#libraryList li').forEach(li => {
+        li.classList.remove(...activeClasses);
+        li.classList.add(...inactiveClasses);
+    });
+
+    // 2. Adiciona destaque ao item ATUAL
+    if (estadoAtual.obra && estadoAtual.capitulo) {
+        const safeObra = estadoAtual.obra.replace(/\s+/g, '_');
+        const safeCap = estadoAtual.capitulo.replace(/\./g, '-');
+        const elementId = `chap-${estadoAtual.domain}-${safeObra}-${safeCap}`;
+        
+        const currentLi = document.getElementById(elementId);
+        if (currentLi) {
+            currentLi.classList.remove(...inactiveClasses);
+            currentLi.classList.add(...activeClasses);
+            
+            // Opcional: Rola a lista para mostrar o capítulo selecionado
+            currentLi.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+}
+
 // --- AÇÕES ---
 async function abrirCapitulo(domain, obra, capitulo, modo) {
     estadoAtual = { ...estadoAtual, domain, obra, capitulo, modo, pageIndex: 0, imagesCache: [] };
+    
     document.getElementById('currentTitle').innerText = `${obra.replace(/_/g, ' ')} / Cap. ${capitulo}`;
     const statusDiv = document.getElementById('currentStatus');
     statusDiv.innerHTML = modo === 'translated' ? `<span class="text-[10px] text-green-400 font-medium flex items-center gap-1">🇧🇷 Traduzido</span>` : `<span class="text-[10px] text-zinc-400 font-medium flex items-center gap-1">🇯🇵 Original</span>`;
@@ -240,6 +270,7 @@ async function abrirCapitulo(domain, obra, capitulo, modo) {
         estadoAtual.imagesCache = data.images.map(img => `/arquivos/${domain}/${obra}/${capitulo}/${folderName}/${img}`);
         renderizarImagens();
         container.focus();
+        destacarCapituloAtual();
     } catch (e) { container.innerHTML = '<p class="text-red-500 mt-10 text-center">Erro ao carregar.</p>'; }
 }
 
@@ -290,37 +321,83 @@ async function iniciarBulkDownload() {
     const btnBulk = document.getElementById('btnBulk');
     const progressArea = document.getElementById('bulkProgressArea');
     const statusText = document.getElementById('bulkStatusText');
+    const progressBar = document.getElementById('bulkProgressBar');
+    const bulkCounter = document.getElementById('bulkCounter');
+
     if (!seriesUrl) return showToast("Coloque a URL da obra!", 'error');
+    
     btnBulk.disabled = true;
+
     try {
-        const res = await fetch(`${API_URL}/fetch-chapters`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seriesUrl, selector: seriesSelector }) });
+        // 1. Busca a lista de capítulos
+        const res = await fetch(`${API_URL}/fetch-chapters`, { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ seriesUrl, selector: seriesSelector }) 
+        });
+        
         const data = await res.json();
-        if (!data.success || data.links.length === 0) { showToast("Nenhum capítulo encontrado.", 'error'); btnBulk.disabled = false; return; }
+        if (!data.success || data.links.length === 0) { 
+            showToast("Nenhum capítulo encontrado.", 'error'); 
+            btnBulk.disabled = false; 
+            return; 
+        }
+
         const links = data.links;
         progressArea.classList.remove('hidden');
         showToast(`Encontrados ${links.length} capítulos.`, 'success');
-        for (let i = 0; i < links.length; i++) {
-            const link = links[i];
-            const percent = Math.round(((i) / links.length) * 100);
-            document.getElementById('bulkProgressBar').style.width = `${percent}%`;
-            document.getElementById('bulkCounter').innerText = `${i + 1}/${links.length}`;
-            statusText.innerText = `Baixando...`;
-            document.getElementById('url').value = link;
-            autoPreencher(); 
-            const siteName = document.getElementById('siteName').value;
-            const chapterName = document.getElementById('chapterName').value;
-            const imgSelector = document.getElementById('selector').value;
-            try {
-                await fetch(`${API_URL}/scrape`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: link, siteName, chapterName, selector: imgSelector }) });
-            } catch (err) {}
-            await new Promise(r => setTimeout(r, 1000));
+
+        // 2. Configuração do Batch (Lote)
+        const BATCH_SIZE = 5; 
+        let processedCount = 0;
+
+        // Loop incrementando de 5 em 5
+        for (let i = 0; i < links.length; i += BATCH_SIZE) {
+            // Pega uma fatia do array (ex: 0 a 5, depois 5 a 10...)
+            const chunk = links.slice(i, i + BATCH_SIZE);
+            
+            // Cria um array de Promessas de download
+            const promises = chunk.map(async (link) => {
+                const { siteName, chapterName } = obterDadosDaUrl(link);
+                const imgSelector = document.getElementById('selector').value; // O seletor de imagem é constante
+
+                try {
+                    await fetch(`${API_URL}/scrape`, { 
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json' }, 
+                        body: JSON.stringify({ url: link, siteName, chapterName, selector: imgSelector }) 
+                    });
+                } catch (err) {
+                    console.error(`Erro ao baixar ${chapterName}`, err);
+                } finally {
+                    // Atualiza contadores visualmente conforme cada um termina dentro do lote
+                    processedCount++;
+                    const percent = Math.round((processedCount / links.length) * 100);
+                    progressBar.style.width = `${percent}%`;
+                    bulkCounter.innerText = `${processedCount}/${links.length}`;
+                }
+            });
+
+            statusText.innerText = `Baixando lote ${Math.ceil((i+1)/BATCH_SIZE)}...`;
+            
+            // Espera os 5 downloads terminarem antes de ir para o próximo lote
+            await Promise.all(promises);
+            
+            // Pequena pausa para respirar (opcional, ajuda a não travar a UI)
+            await new Promise(r => setTimeout(r, 500));
         }
-        document.getElementById('bulkProgressBar').style.width = `100%`;
+
+        progressBar.style.width = `100%`;
         statusText.innerText = "Concluído!";
         showToast("Processo finalizado!", 'success');
         carregarBiblioteca();
+        
+    } catch (e) { 
+        console.error(e);
+        showToast("Erro no Bulk.", 'error'); 
+    } finally {
         btnBulk.disabled = false;
-    } catch (e) { showToast("Erro no Bulk.", 'error'); btnBulk.disabled = false; }
+    }
 }
 
 async function excluirCapitulo(event, domain, siteName, chapterName) {
@@ -374,6 +451,47 @@ function autoPreencher() {
     } catch (e) { }
 }
 
+
+// Função auxiliar para calcular nomes sem depender dos inputs visuais
+function obterDadosDaUrl(url) {
+    try {
+        const cleanUrl = url.replace(/\/$/, '');
+        const urlObj = new URL(cleanUrl);
+        const segments = urlObj.pathname.split('/').filter(p => p.length > 0);
+        const lastPart = segments[segments.length - 1];
+        
+        let siteName = '';
+        let chapterName = '';
+
+        if (segments[segments.length - 2] === 'chapter') {
+            chapterName = lastPart;
+            let rawName = segments[segments.length - 3];
+            siteName = rawName.replace(/-[a-zA-Z0-9]+$/, '').replace(/-/g, '_');
+        } else {
+            const matchChapterOnly = lastPart.match(/^chapter[-_](\d+(\.\d+)?)$/i);
+            if (matchChapterOnly) {
+                chapterName = matchChapterOnly[1];
+                const namePart = segments[segments.length - 2];
+                if (namePart) siteName = namePart.replace(/-/g, '_');
+            } else {
+                const matchCombined = lastPart.match(/(.+)[-_]chapter[-_](\d+(\.\d+)?)/i);
+                if (matchCombined) {
+                    siteName = matchCombined[1].replace(/-/g, '_');
+                    chapterName = matchCombined[2];
+                }
+            }
+        }
+        
+        // Fallback caso falhe a regex, usa timestamps ou algo genérico para não quebrar
+        if (!siteName) siteName = "Obra_Desconhecida";
+        if (!chapterName) chapterName = "000";
+
+        return { siteName, chapterName };
+    } catch (e) {
+        return { siteName: "Erro", chapterName: "Erro" };
+    }
+}
+
 function showToast(message, type = 'success') {
     const container = document.getElementById('toast-container');
     const toast = document.createElement('div');
@@ -383,4 +501,41 @@ function showToast(message, type = 'success') {
     container.appendChild(toast);
     requestAnimationFrame(() => toast.classList.remove('translate-x-10', 'opacity-0'));
     setTimeout(() => { toast.classList.add('opacity-0', 'translate-x-10'); setTimeout(() => toast.remove(), 300); }, 3000);
+}
+
+
+function setupAtalhos() {
+    document.addEventListener('keydown', (e) => {
+    const tag = document.activeElement.tagName;
+
+    // Ignora se estiver digitando em inputs
+    if (['INPUT', 'TEXTAREA'].includes(tag)) return;
+
+    const key = e.key.toLowerCase();
+
+    const actions = {
+        arrowright: () => estadoAtual.viewMode === 'page' && mudarPagina(1),
+        d: () => estadoAtual.viewMode === 'page' && mudarPagina(1),
+        arrowleft: () => estadoAtual.viewMode === 'page' && mudarPagina(-1),
+        a: () => estadoAtual.viewMode === 'page' && mudarPagina(-1),
+        '+': () => ajustarZoom(2),
+        '=': () => ajustarZoom(2),
+        '-': () => ajustarZoom(-2),
+        '_': () => ajustarZoom(-2),
+        '0': resetarZoom,
+        '/': () => {
+            e.preventDefault();
+            const input = document.getElementById('url');
+            if (input) {
+                input.focus();
+                input.select();
+            }
+        }
+    };
+
+    if (actions[key]) {
+        actions[key]();
+    }
+});
+
 }

@@ -3,46 +3,78 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs/promises');
 const fsSync = require('fs');
-const puppeteer = require('puppeteer');
 const axios = require('axios');
 const { exec } = require('child_process');
-require('dotenv').config()
+const sharp = require('sharp'); 
+const dotenv = require('dotenv');
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+puppeteer.use(StealthPlugin());
+dotenv.config();
 
-// Define o diretório base corretamente
+
 const DIR_NAME = path.join(__dirname.replace("\\server",""))
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// --- CONFIGURAÇÃO DE CAMINHOS ---
+
 const PROJECT_ROOT = path.join(DIR_NAME , '..'); 
 const VENV_PATH = path.join(PROJECT_ROOT, 'venv', 'Scripts', 'activate.bat');
 const API_KEY = process.env.GEMINI_API_KEY || 'SUA_CHAVE_AQUI_SE_NAO_USAR_ENV';
 const ARQUIVOS_ROOT = path.join(DIR_NAME, 'arquivos');
+const PORT = 3000;
+const MAX_IMAGE_HEIGHT = 4000;
 
 app.use(express.static(DIR_NAME)); 
 app.use('/arquivos', express.static(ARQUIVOS_ROOT));
 
-const PORT = 3000;
 
-// Função central de Log (Terminal + Frontend)
+let globalBrowser = null;
+
+
 function log(type, message, progress = null) {
-    // 1. Log no Terminal (com cores)
+    
     const timestamp = new Date().toLocaleTimeString();
-    let color = '\x1b[37m'; // Branco
-    if (type === 'INFO') color = '\x1b[36m'; // Ciano
-    if (type === 'SUCCESS') color = '\x1b[32m'; // Verde
-    if (type === 'ERROR') color = '\x1b[31m'; // Vermelho
-    if (type === 'WARN') color = '\x1b[33m'; // Amarelo
+    let color = '\x1b[37m'; 
+
+    const actions = {
+        'INFO': '\x1b[36m',
+        'SUCCESS':  '\x1b[32m',
+        'ERROR':   '\x1b[31m',
+        'WARN':   '\x1b[33m',
+    };
+
+    if (actions[type]) {
+        color = actions[type];
+    }
 
     console.log(`[${timestamp}] ${color}[${type}]\x1b[0m ${message}`);
 }
 
-// --- ROTA DA BIBLIOTECA ---
+async function getBrowser() {
+    if (!globalBrowser || !globalBrowser.isConnected()) {
+        console.log('[SYSTEM] Iniciando nova instância do navegador...');
+        globalBrowser = await puppeteer.launch({
+            headless: "new",
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--disable-gpu'
+            ]
+        });
+    }
+    return globalBrowser;
+}
+
+
 app.get('/library', async (req, res) => {
-    // (Código mantido igual, omitido para economizar espaço, use o anterior)
+    
     try {
+        log('INFO', `A Rota /library foi chamada`);
         const library = [];
         if (!fsSync.existsSync(ARQUIVOS_ROOT)) return res.json([]);
         const domains = await fs.readdir(ARQUIVOS_ROOT);
@@ -74,13 +106,14 @@ app.get('/library', async (req, res) => {
                 }
             }
         }
+       
         res.json(library);
     } catch (error) { res.json([]); }
 });
 
-// --- ROTA DE IMAGENS ---
+
 app.post('/get-images', async (req, res) => {
-    // (Código mantido igual)
+    
     const { domain, siteName, chapterName, type } = req.body; 
     const folderType = type === 'translated' ? 'traduzido' : 'original';
     const dirPath = path.join(ARQUIVOS_ROOT, domain, siteName, chapterName, folderType);
@@ -94,64 +127,223 @@ app.post('/get-images', async (req, res) => {
     } catch (error) { res.json({ success: false, error: error.message }); }
 });
 
-// --- IA RECOMMENDATIONS ---
-// (Código mantido igual ao anterior, omitido aqui)
-app.get('/recommendations', async (req, res) => { res.json({success: false, error: "Use o código anterior para esta parte"}) });
 
 
-// --- FUNÇÕES DE DOWNLOAD ---
+app.get('/recommendations', async (req, res) => {
+    
+    if (!API_KEY || API_KEY === 'SUA_CHAVE_AQUI_SE_NAO_USAR_ENV') {
+        return res.json({ success: false, error: 'Configure a GEMINI_API_KEY no arquivo .env ou no server.js' });
+    }
+
+    try {
+        log('INFO', 'Analisando biblioteca para gerar recomendações...');
+        
+        const libraryItems = [];
+        if (fsSync.existsSync(ARQUIVOS_ROOT)) {
+            const domains = await fs.readdir(ARQUIVOS_ROOT);
+            for (const domain of domains) {
+                const domainPath = path.join(ARQUIVOS_ROOT, domain);
+                if ((await fs.stat(domainPath)).isDirectory()) {
+                    const mangas = await fs.readdir(domainPath);
+                    
+                    mangas.forEach(m => libraryItems.push(m.replace(/_/g, ' ')));
+                }
+            }
+        }
+
+        if (libraryItems.length === 0) {
+            return res.json({ success: false, error: 'Sua biblioteca está vazia. Baixe algo primeiro para receber dicas!' });
+        }
+
+        
+        const recentItems = libraryItems.slice(-10).join(', ');
+
+        
+        const prompt = `
+            Eu sou um leitor que gosta das seguintes obras: ${recentItems}.
+            Com base nisso, recomende 3 manhwas ou mangás similares que eu ainda não tenha lido.
+            
+            Regras de formatação:
+            - Use **negrito** para o título da obra.
+            - Dê uma sinopse super curta (máximo 1 frase) para cada um.
+            - Use marcadores de lista (*).
+            - Responda em Português do Brasil.
+            - Seja casual e divertido.
+        `;
+
+        
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
+        
+        const response = await axios.post(geminiUrl, {
+            contents: [{ parts: [{ text: prompt }] }]
+        });
+
+        
+        const aiResponse = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        if (aiResponse) {
+            log('SUCCESS', 'Recomendações geradas com sucesso.');
+            res.json({ success: true, recommendation: aiResponse });
+        } else {
+            throw new Error('Resposta vazia da IA.');
+        }
+
+    } catch (error) {
+        console.error(error); 
+        const msg = error.response?.data?.error?.message || error.message;
+        log('ERROR', `Falha ao gerar recomendações: ${msg}`);
+        res.json({ success: false, error: 'Erro ao consultar o Gemini. Verifique sua API Key.' });
+    }
+});
+
+
+
 async function downloadImage(url, index, directory) {
     try {
         const response = await axios.get(url, { responseType: 'arraybuffer', headers: { 'User-Agent': 'Mozilla/5.0' } });
+        
         let extension = path.extname(new URL(url).pathname) || '.jpg';
         if (extension.length > 5) extension = '.jpg';
+        
+        
         const filename = `${String(index + 1).padStart(3, '0')}${extension}`;
-        await fs.writeFile(path.join(directory, filename), response.data);
+        const filePath = path.join(directory, filename);
+        
+        await fs.writeFile(filePath, response.data);
+
+        
+        
+        await smartCropImage(filePath);
+        
+
         return { status: 'SUCCESS' };
-    } catch (error) { return { status: 'FAILURE' }; }
+    } catch (error) { 
+        
+        return { status: 'FAILURE' }; 
+    }
 }
+
+async function smartCropImage(filePath) {
+    try {
+        const image = sharp(filePath);
+        const metadata = await image.metadata();
+
+        
+        if (metadata.height <= MAX_IMAGE_HEIGHT) {
+            return; 
+        }
+
+        
+
+        const totalParts = Math.ceil(metadata.height / MAX_IMAGE_HEIGHT);
+        const originalName = path.parse(filePath).name; 
+        const ext = path.parse(filePath).ext;          
+        const dir = path.dirname(filePath);
+
+        const cropPromises = [];
+
+        for (let i = 0; i < totalParts; i++) {
+            const startY = i * MAX_IMAGE_HEIGHT;
+            
+            const extractHeight = Math.min(MAX_IMAGE_HEIGHT, metadata.height - startY);
+
+            
+            
+            const partIndex = String(i).padStart(2, '0');
+            const outputName = `${originalName}_${partIndex}${ext}`;
+            const outputPath = path.join(dir, outputName);
+
+            const promise = image
+                .clone() 
+                .extract({ left: 0, top: startY, width: metadata.width, height: extractHeight })
+                .toFile(outputPath);
+            
+            cropPromises.push(promise);
+        }
+
+        
+        await Promise.all(cropPromises);
+
+        
+        
+        
+        await fs.unlink(filePath); 
+        
+        return { sliced: true, parts: totalParts };
+
+    } catch (error) {
+        console.error(`Erro no Smart Crop: ${error.message}`);
+        return { sliced: false };
+    }
+}
+
 
 const FALLBACK_SELECTORS = ['#readerarea img', '.reading-content img', '.entry-content img', '.wp-manga-chapter-img', '#image-container img', '.blob_content img'];
 
 app.post('/scrape', async (req, res) => {
     const { url, siteName, chapterName, selector } = req.body;
+    
+    
     const urlObj = new URL(url);
     const domain = urlObj.hostname.split('.')[0]; 
     const safeSite = siteName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
     const safeChapter = chapterName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
 
+    
     let searchOrder = [...FALLBACK_SELECTORS];
     if (selector && selector.trim() !== "") searchOrder.unshift(selector);
     searchOrder = [...new Set(searchOrder)];
 
-    let browser;
+    let page = null;
+
     try {
         log('INFO', `Iniciando Download: ${safeSite} - Cap ${safeChapter}`);
+        
         
         const chapterDir = path.join(ARQUIVOS_ROOT, domain, safeSite, safeChapter);
         const originalDir = path.join(chapterDir, 'original');
         await fs.mkdir(originalDir, { recursive: true });
 
-        browser = await puppeteer.launch({ headless: "new" });
-        const page = await browser.newPage();
+        
+        const browser = await getBrowser();
+        page = await browser.newPage();
+
+        
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+            if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) {
+                req.abort();
+            } else {
+                req.continue();
+            }
+        });
+
+        
         await page.setViewport({ width: 1280, height: 800 });
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        
         
         log('INFO', `Acessando URL...`, 10);
-        await page.goto(url, { waitUntil: 'networkidle2', timeout: 90000 });
+        
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
         let imageUrls = [];
         log('INFO', `Buscando imagens na página...`, 20);
         
+        
         for (const currentSel of searchOrder) {
             try {
-                await page.waitForSelector(currentSel, { timeout: 2000 });
+                
+                try {
+                    await page.waitForSelector(currentSel, { timeout: 3000 });
+                } catch(e) { continue; } 
+
                 const imagesFound = await page.evaluate((sel) => {
                     const el = document.querySelectorAll(sel);
                     return Array.from(el)
                         .map(img => img.getAttribute('data-src') || img.getAttribute('src') || img.getAttribute('data-lazy-src') || img.src)
                         .filter(src => src && src.startsWith('http'));
                 }, currentSel);
+
                 if (imagesFound.length > 0) { 
                     imageUrls = imagesFound; 
                     log('SUCCESS', `Imagens encontradas com seletor: ${currentSel}`);
@@ -160,42 +352,51 @@ app.post('/scrape', async (req, res) => {
             } catch (e) { continue; }
         }
 
+        
+        await page.close();
+        page = null; 
+
         if (imageUrls.length === 0) { 
-            await browser.close(); 
             log('ERROR', 'Nenhuma imagem encontrada.');
-            return res.json({ success: false, error: 'Seletor não encontrado.' }); 
+            return res.json({ success: false, error: 'Seletor não encontrado ou site protegido.' }); 
         }
 
+        
         log('INFO', `Iniciando download de ${imageUrls.length} imagens...`, 30);
         
         let downloadedCount = 0;
-        const downloadPromises = imageUrls.map(async (u, i) => {
-            const res = await downloadImage(u, i, originalDir);
-            downloadedCount++;
-            // Calcula progresso: começa em 30%, vai até 100%
-            const progress = 30 + Math.floor((downloadedCount / imageUrls.length) * 70);
-            log('INFO', `Baixada imagem ${downloadedCount}/${imageUrls.length}`, progress);
-            return res;
-        });
-
-        await Promise.all(downloadPromises);
-        await browser.close();
+        
+        const CONCURRENCY_LIMIT = 5;
+        
+        
+        for (let i = 0; i < imageUrls.length; i += CONCURRENCY_LIMIT) {
+            const chunk = imageUrls.slice(i, i + CONCURRENCY_LIMIT);
+            const promises = chunk.map(async (u, idx) => {
+                const globalIndex = i + idx;
+                const res = await downloadImage(u, globalIndex, originalDir); 
+                downloadedCount++;
+                const progress = 30 + Math.floor((downloadedCount / imageUrls.length) * 70);
+                log('INFO', `Baixada imagem ${downloadedCount}/${imageUrls.length}`, progress);
+                return res;
+            });
+            await Promise.all(promises);
+        }
 
         log('SUCCESS', `Download Completo! Salvo em ${domain}`, 100);
         res.json({ success: true, message: `Download concluído em '${domain}' (${imageUrls.length} imagens).` });
 
     } catch (error) {
-        if (browser) await browser.close();
+        if (page) await page.close();
         log('ERROR', `Erro fatal: ${error.message}`);
-        res.status(500).json({ error: 'Erro no servidor.' });
+        res.status(500).json({ error: 'Erro no servidor: ' + error.message });
     }
 });
 
-// --- ROTA DE TRADUÇÃO (Com logs em tempo real) ---
+
 app.post('/translate', async (req, res) => {
     const { domain, siteName, chapterName, translator } = req.body; 
     
-    // Atualiza config
+    
     try {
         const configPath = path.join(DIR_NAME, 'config/configv1.json');
         if (fsSync.existsSync(configPath)) {
@@ -221,12 +422,12 @@ app.post('/translate', async (req, res) => {
             
             const process = exec(command, { cwd: PROJECT_ROOT });
             
-            // LER A SAÍDA DO PYTHON EM TEMPO REAL
+            
             process.stdout.on('data', (d) => {
                 const line = d.toString().trim();
-                console.log(`[PY]: ${line}`); // Loga no terminal do node
+                console.log(`[PY]: ${line}`); 
                 
-                // Tenta extrair info útil para o usuário
+                
                 if (line.includes('Translation')) {
                     log('INFO', `Traduzindo página...`);
                 } else if (line.includes('Rendering')) {
@@ -238,9 +439,9 @@ app.post('/translate', async (req, res) => {
 
             process.stderr.on('data', (d) => {
                 console.error(`[PY-ERR]: ${d}`);
-                // Python often sends normal logs to stderr too
-                if (!d.includes('tqdm')) { // ignora barra de progresso feia do python
-                     // log('WARN', `Log IA: ${d.toString().slice(0, 50)}...`);
+                
+                if (!d.includes('tqdm')) { 
+                     
                 }
             });
 
@@ -265,12 +466,79 @@ app.post('/translate', async (req, res) => {
 });
 
 app.post('/fetch-chapters', async (req, res) => {
-    // (Mantido, omitido para brevidade)
-    res.json({success: false, error: "Use implementação anterior"});
+    const { seriesUrl, selector } = req.body;
+
+    if (!seriesUrl) {
+        return res.json({ success: false, error: 'URL da série não fornecida.' });
+    }
+
+    let page = null;
+    try {
+        log('INFO', `Buscando lista de capítulos em: ${seriesUrl}`);
+
+        
+        const browser = await getBrowser();
+        page = await browser.newPage();
+
+        
+        
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+            if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) {
+                req.abort();
+            } else {
+                req.continue();
+            }
+        });
+
+        
+        await page.goto(seriesUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+
+        
+        const searchSelector = selector || '#chapterlist a';
+
+        
+        const chapterLinks = await page.evaluate((sel) => {
+            
+            const elements = document.querySelectorAll(sel);
+            
+            return Array.from(elements)
+                .map(el => {
+                    
+                    return el.getAttribute('href') || el.closest('a')?.getAttribute('href');
+                })
+                .filter(href => href && href.startsWith('http')); 
+        }, searchSelector);
+
+        await page.close();
+        page = null;
+
+        
+        
+        const uniqueLinks = [...new Set(chapterLinks)];
+
+        
+        
+        
+
+        if (uniqueLinks.length === 0) {
+            log('WARN', 'Nenhum capítulo encontrado.');
+            return res.json({ success: false, error: 'Nenhum link encontrado com este seletor. Tente ajustar o seletor.' });
+        }
+
+        log('SUCCESS', `Lista recuperada: ${uniqueLinks.length} capítulos encontrados.`);
+        
+        res.json({ success: true, links: uniqueLinks });
+
+    } catch (error) {
+        if (page) await page.close();
+        log('ERROR', `Erro ao buscar capítulos: ${error.message}`);
+        res.status(500).json({ success: false, error: 'Erro ao buscar lista de capítulos.' });
+    }
 });
 
 app.delete('/delete-chapter', async (req, res) => {
-    // (Mantido)
+    
     const { domain, siteName, chapterName } = req.body;
     const chapterPath = path.join(ARQUIVOS_ROOT, domain, siteName, chapterName);
     try {
