@@ -17,7 +17,10 @@ def det_batch_forward_default(batch: np.ndarray, device: str):
     if isinstance(batch, list):
         batch = np.array(batch)
     batch = einops.rearrange(batch.astype(np.float32) / 127.5 - 1.0, 'n h w c -> n c h w')
+    
+    # Move o batch para o dispositivo (seja ele CUDA, MPS ou DirectML)
     batch = torch.from_numpy(batch).to(device)
+    
     with torch.no_grad():
         db, mask = MODEL(batch)
         db = db.sigmoid().cpu().numpy()
@@ -41,17 +44,27 @@ class DefaultDetector(OfflineDetector):
 
     async def _load(self, device: str):
         self.model = TextDetectionDefault()
+        
+        # Carrega os pesos sempre na CPU primeiro para evitar erro de backend desconhecido
         sd = torch.load(self._get_file_path('detect-20241225.ckpt'), map_location='cpu')
         self.model.load_state_dict(sd['model'] if 'model' in sd else sd)
         self.model.eval()
         self.device = device
-        if device == 'cuda' or device == 'mps':
-            self.model = self.model.to(self.device)
+        
+        # --- CORREÇÃO PARA AMD (DIRECTML) ---
+        # O código original tinha: if device == 'cuda' or device == 'mps':
+        # Isso impedia que o modelo fosse movido para a GPU se fosse DirectML.
+        # Agora movemos incondicionalmente, pois .to() lida bem com todos os tipos.
+        self.model = self.model.to(self.device)
+            
         global MODEL
         MODEL = self.model
 
     async def _unload(self):
         del self.model
+        # Limpeza opcional
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     async def _infer(self, image: np.ndarray, detect_size: int, text_threshold: float, box_threshold: float,
                      unclip_ratio: float, verbose: bool = False):

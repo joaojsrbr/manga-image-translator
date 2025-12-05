@@ -56,3 +56,5 @@ key.pem
 configv1.json
 /tradutor
 translate-folder.bat
+/input
+/output

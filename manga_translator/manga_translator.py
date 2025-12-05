@@ -6,6 +6,10 @@ import os
 import regex as re
 import time
 import torch
+try:
+    import torch_directml
+except ImportError:
+    torch_directml = None
 import logging
 import sys
 import traceback
@@ -104,6 +108,8 @@ class MangaTranslator:
     batch_size: int
 
     def __init__(self, params: dict = None):
+        # Tenta importar o DirectML (AMD)
+
         self.pre_dict = params.get('pre_dict', None)
         self.post_dict = params.get('post_dict', None)
         self.font_path = None
@@ -127,15 +133,40 @@ class MangaTranslator:
         # batch_concurrent 会在 parse_init_params 中验证并设置
         self.batch_concurrent = params.get('batch_concurrent', False)
         
+        # --- LÓGICA AMD / DIRECTML ---
+        # Detectamos se queremos usar GPU mas não temos CUDA/MPS, apenas DirectML.
+        # Se for o caso, enganamos o parse_init_params desligando 'use_gpu' temporariamente
+        # para evitar que ele gere uma Exception por falta de CUDA.
+        real_use_gpu = params.get('use_gpu', False)
+        using_directml_fallback = False
+
+        if real_use_gpu and torch_directml:
+            has_cuda = torch.cuda.is_available()
+            has_mps = hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
+            
+            if not has_cuda and not has_mps:
+                using_directml_fallback = True
+                params['use_gpu'] = False # Desativa temporariamente para passar pela validação
+                logger.info("AMD GPU detected (DirectML). Bypassing standard CUDA check.")
+
+        # Executa a inicialização padrão
         self.parse_init_params(params)
+
+        # --- REAPLICAÇÃO LÓGICA AMD ---
+        # Agora forçamos o dispositivo DirectML se o fallback foi ativado
+        if using_directml_fallback:
+            self.device = torch_directml.device()
+            params['use_gpu'] = True # Restaura o parâmetro original
+            logger.info(f"Device set to DirectML: {self.device}")
+
         self.result_sub_folder = ''
 
         # The flag below controls whether to allow TF32 on matmul. This flag defaults to False
         # in PyTorch 1.12 and later.
-        torch.backends.cuda.matmul.allow_tf32 = True
-
-        # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
-        torch.backends.cudnn.allow_tf32 = True
+        if torch.cuda.is_available():
+            torch.backends.cuda.matmul.allow_tf32 = True
+            # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
+            torch.backends.cudnn.allow_tf32 = True
 
         self._model_usage_timestamps = {}
         self._detector_cleanup_task = None
@@ -355,7 +386,9 @@ class MangaTranslator:
 
     @property
     def using_gpu(self):
-        return self.device.startswith('cuda') or self.device == 'mps'
+        if isinstance(self.device, str):
+            return self.device.startswith('cuda') or self.device == 'mps'
+        return getattr(self.device, 'type', '') == 'privateuseone'
 
     async def translate(self, image: Image.Image, config: Config, image_name: str = None, skip_context_save: bool = False) -> Context:
         """
