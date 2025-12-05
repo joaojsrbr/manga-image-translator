@@ -48,3 +48,6 @@ input:-webkit-autofill:focus {
     -webkit-box-shadow: 0 0 0px 1000px #27272a inset; /* Cor border-zinc-800 */
     transition: background-color 5000s ease-in-out 0s;
 }
+
+.markdown-body strong { color: #a78bfa; font-weight: 700; }
+.markdown-body li { margin-bottom: 0.5rem; }

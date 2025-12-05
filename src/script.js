@@ -12,12 +12,12 @@ let estadoAtual = {
 
 
 window.onload = () => {
-    carregarBiblioteca();
+    carregarBiblioteca(true);
     setupAtalhos();
-    setInterval(carregarBiblioteca, 20000);
+    setInterval(() => { carregarBiblioteca(false); }, 20000);
 };
 
-// --- IA ---
+
 async function pedirSugestoesIA() {
     const modal = document.getElementById('aiModal');
     const content = document.getElementById('aiContent');
@@ -36,40 +36,31 @@ async function pedirSugestoesIA() {
 function aplicarZoom(valor) {
     estadoAtual.zoomLevel = parseInt(valor);
     
-    // Atualiza UI
+    
     document.getElementById('zoomSlider').value = estadoAtual.zoomLevel;
     document.getElementById('zoomValue').innerText = `${estadoAtual.zoomLevel}%`;
 
     const imagens = document.querySelectorAll('#imageContainer img');
     
     if (estadoAtual.viewMode === 'webtoon') {
-        // No modo Webtoon, o zoom controla a LARGURA máxima (max-width)
-        // 100% no slider = 768px (3xl do tailwind) que é um tamanho bom de leitura
-        // Vamos permitir ir além disso
         imagens.forEach(img => {
-            // Se zoom for 100, usa o padrão. Se for maior, expande.
-            // Convertendo: 100% -> 50vw (metade da tela), 200% -> 100vw
-            const widthPercent = Math.min(100, Math.max(10, estadoAtual.zoomLevel / 2)); // Ajuste fino
-            
-            // Mas para ser mais responsivo, vamos alterar o max-width em pixels ou porcentagem direta
+            // const widthPercent = Math.min(100, Math.max(10, estadoAtual.zoomLevel / 2)); 
             if (estadoAtual.zoomLevel <= 100) {
-                // De 10% a 100% de largura do container limitado
                 img.style.maxWidth = `${estadoAtual.zoomLevel}%`; 
                 img.style.width = 'auto';
             } else {
-                // Acima de 100%, força largura maior que o container (scroll horizontal aparece)
                 img.style.maxWidth = 'none';
                 img.style.width = `${estadoAtual.zoomLevel}%`;
             }
         });
     } else {
-        // No modo Página, o zoom usa Transform Scale
+        
         imagens.forEach(img => {
             const scale = estadoAtual.zoomLevel / 100;
             img.style.transform = `scale(${scale})`;
-            img.style.transformOrigin = 'top center'; // Zoom a partir do topo
+            img.style.transformOrigin = 'top center'; 
             
-            // Ajuste de margem para o scroll funcionar se a imagem crescer muito
+            
             if (scale > 1) {
                 img.style.marginTop = `${(scale - 1) * 20}px`; 
                 img.style.marginBottom = `${(scale - 1) * 20}px`;
@@ -91,7 +82,7 @@ function resetarZoom() {
     aplicarZoom(20);
 }
 
-// --- RENDERIZAÇÃO ATUALIZADA ---
+
 
 function renderizarImagens() {
     const container = document.getElementById('imageContainer');
@@ -109,7 +100,7 @@ function renderizarImagens() {
             const img = document.createElement('img');
             img.src = src;
             img.className = "mx-auto shadow-2xl mb-0 block transition-all duration-200 ease-out"; 
-            // Removemos as classes fixas de width (max-w-3xl) para o JS controlar
+            
             img.loading = "lazy";
             container.appendChild(img);
         });
@@ -122,21 +113,21 @@ function renderizarImagens() {
         const src = estadoAtual.imagesCache[estadoAtual.pageIndex];
         const img = document.createElement('img');
         img.src = src;
-        // max-h-full garante que caiba na tela inicialmente
+        
         img.className = "max-h-full max-w-full object-contain shadow-2xl transition-transform duration-200 ease-out"; 
         container.appendChild(img);
 
         counter.innerText = `${estadoAtual.pageIndex + 1} / ${estadoAtual.imagesCache.length}`;
     }
 
-    // Reaplica o zoom atual nas novas imagens
+    
     aplicarZoom(estadoAtual.zoomLevel);
 }
 
-// --- ATALHOS DE TECLADO ---
 
 
-// --- MODOS DE LEITURA ---
+
+
 function mudarModoLeitura(modo) {
     estadoAtual.viewMode = modo;
     const btnWeb = document.getElementById('btnWebtoon');
@@ -160,8 +151,8 @@ function mudarPagina(delta) {
     }
 }
 
-// --- BIBLIOTECA ---
-async function carregarBiblioteca() {
+
+async function carregarBiblioteca(log) {
     const listEl = document.getElementById('libraryList');
     try {
         const res = await fetch(`${API_URL}/library`);
@@ -182,20 +173,20 @@ async function carregarBiblioteca() {
             
             obra.chapters.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 
-            // console.log(obra.chapters);
+            
 
             obra.chapters.forEach(cap => {
                 const li = document.createElement('li');
                 
-                // 1. Cria um ID único sanitizado para o elemento
+                
                 const safeObra = obra.name.replace(/\s+/g, '_');
                 const safeCap = cap.name.replace(/\./g, '-');
                 const elementId = `chap-${obra.domain}-${safeObra}-${safeCap}`;
                 li.id = elementId;
 
-                // 2. Define classes Base e Ativa
+                
                 const baseClass = "fade-in rounded p-2 flex flex-col gap-2 group/item transition-all border";
-                // Se for o atual, usa as cores de destaque (Primary), senão usa o padrão (Zinc)
+                
                 const isCurrent = estadoAtual.obra === obra.name && estadoAtual.capitulo === cap.name;
                 
                 const activeClass = "bg-primary/10 border-primary shadow-[0_0_15px_rgba(139,92,246,0.15)] ring-1 ring-primary/30";
@@ -203,7 +194,7 @@ async function carregarBiblioteca() {
 
                 li.className = `${baseClass} ${isCurrent ? activeClass : inactiveClass}`;
 
-                // ... (o resto do conteúdo do innerHTML continua igual) ...
+                
                 let transBtnHtml = cap.hasTranslation 
                     ? `<button onclick="abrirCapitulo('${obra.domain}', '${obra.name}', '${cap.name}', 'translated')" class="flex-1 text-[10px] py-1 rounded transition border bg-primary/10 hover:bg-primary/20 border-primary/30 text-primary hover:text-white font-semibold">Ler Traduzido</button>`
                     : `<button onclick="traduzirCapitulo(this, '${obra.domain}', '${obra.name}', '${cap.name}')" class="flex-1 text-[10px] py-1 rounded transition border bg-zinc-900 hover:bg-primary hover:text-white border-zinc-700 text-zinc-400 font-medium flex justify-center items-center gap-1 group/trans"><span>✨</span> Traduzir</button>`;
@@ -216,21 +207,25 @@ async function carregarBiblioteca() {
             details.appendChild(ul);
             listEl.appendChild(details);
         });
-    } catch (e) { console.error(e); showToast('Erro ao carregar biblioteca.', 'error'); }
+    } catch (e) {
+        if (log) {
+            console.error(e); showToast('Erro ao carregar biblioteca.', 'error');
+        }
+    }
 }
 
 function destacarCapituloAtual() {
-    // Classes de Estilo
+    
     const activeClasses = ["bg-primary/10", "border-primary", "shadow-[0_0_15px_rgba(139,92,246,0.15)]", "ring-1", "ring-primary/30"];
     const inactiveClasses = ["bg-zinc-800/40", "hover:bg-zinc-800", "border-zinc-700/50", "hover:border-zinc-600"];
 
-    // 1. Remove destaque de TODOS os itens da lista
+    
     document.querySelectorAll('#libraryList li').forEach(li => {
         li.classList.remove(...activeClasses);
         li.classList.add(...inactiveClasses);
     });
 
-    // 2. Adiciona destaque ao item ATUAL
+    
     if (estadoAtual.obra && estadoAtual.capitulo) {
         const safeObra = estadoAtual.obra.replace(/\s+/g, '_');
         const safeCap = estadoAtual.capitulo.replace(/\./g, '-');
@@ -241,13 +236,13 @@ function destacarCapituloAtual() {
             currentLi.classList.remove(...inactiveClasses);
             currentLi.classList.add(...activeClasses);
             
-            // Opcional: Rola a lista para mostrar o capítulo selecionado
+            
             currentLi.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
     }
 }
 
-// --- AÇÕES ---
+
 async function abrirCapitulo(domain, obra, capitulo, modo) {
     estadoAtual = { ...estadoAtual, domain, obra, capitulo, modo, pageIndex: 0, imagesCache: [] };
     
@@ -299,7 +294,7 @@ async function baixarCapitulo() {
 
 async function traduzirCapitulo(btnElement, domain, siteName, chapterName) {
     const originalText = btnElement.innerHTML;
-    // const translatorEngine = document.getElementById('translatorType').value || 'gemini';
+    
     const translatorEngine = 'gemini';
     btnElement.disabled = true;
     btnElement.innerHTML = `<svg class="animate-spin h-3 w-3 text-white mr-1" ...></svg> Traduzindo...`;
@@ -329,7 +324,7 @@ async function iniciarBulkDownload() {
     btnBulk.disabled = true;
 
     try {
-        // 1. Busca a lista de capítulos
+        
         const res = await fetch(`${API_URL}/fetch-chapters`, { 
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' }, 
@@ -347,19 +342,19 @@ async function iniciarBulkDownload() {
         progressArea.classList.remove('hidden');
         showToast(`Encontrados ${links.length} capítulos.`, 'success');
 
-        // 2. Configuração do Batch (Lote)
+        
         const BATCH_SIZE = 5; 
         let processedCount = 0;
 
-        // Loop incrementando de 5 em 5
+        
         for (let i = 0; i < links.length; i += BATCH_SIZE) {
-            // Pega uma fatia do array (ex: 0 a 5, depois 5 a 10...)
+            
             const chunk = links.slice(i, i + BATCH_SIZE);
             
-            // Cria um array de Promessas de download
+            
             const promises = chunk.map(async (link) => {
                 const { siteName, chapterName } = obterDadosDaUrl(link);
-                const imgSelector = document.getElementById('selector').value; // O seletor de imagem é constante
+                const imgSelector = document.getElementById('selector').value; 
 
                 try {
                     await fetch(`${API_URL}/scrape`, { 
@@ -370,7 +365,7 @@ async function iniciarBulkDownload() {
                 } catch (err) {
                     console.error(`Erro ao baixar ${chapterName}`, err);
                 } finally {
-                    // Atualiza contadores visualmente conforme cada um termina dentro do lote
+                    
                     processedCount++;
                     const percent = Math.round((processedCount / links.length) * 100);
                     progressBar.style.width = `${percent}%`;
@@ -380,10 +375,10 @@ async function iniciarBulkDownload() {
 
             statusText.innerText = `Baixando lote ${Math.ceil((i+1)/BATCH_SIZE)}...`;
             
-            // Espera os 5 downloads terminarem antes de ir para o próximo lote
+            
             await Promise.all(promises);
             
-            // Pequena pausa para respirar (opcional, ajuda a não travar a UI)
+            
             await new Promise(r => setTimeout(r, 500));
         }
 
@@ -452,7 +447,7 @@ function autoPreencher() {
 }
 
 
-// Função auxiliar para calcular nomes sem depender dos inputs visuais
+
 function obterDadosDaUrl(url) {
     try {
         const cleanUrl = url.replace(/\/$/, '');
@@ -482,7 +477,7 @@ function obterDadosDaUrl(url) {
             }
         }
         
-        // Fallback caso falhe a regex, usa timestamps ou algo genérico para não quebrar
+        
         if (!siteName) siteName = "Obra_Desconhecida";
         if (!chapterName) chapterName = "000";
 
@@ -508,7 +503,7 @@ function setupAtalhos() {
     document.addEventListener('keydown', (e) => {
     const tag = document.activeElement.tagName;
 
-    // Ignora se estiver digitando em inputs
+    
     if (['INPUT', 'TEXTAREA'].includes(tag)) return;
 
     const key = e.key.toLowerCase();

@@ -4,14 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manga AI Reader</title>
+    <link rel="icon" href="src/favicon.ico" type="image/x-icon">
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="scripts/tailwind_script.js"></script>
-    <link rel="stylesheet" href="css/style.css">
-    <style>
-        .markdown-body strong { color: #a78bfa; font-weight: 700; }
-        .markdown-body li { margin-bottom: 0.5rem; }
-    </style>
+    <script src="src/tailwind_script.js"></script>
+    <link rel="stylesheet" href="src/style.css">
 </head>
 <body class="bg-bg text-zinc-300 h-screen overflow-hidden flex text-sm antialiased selection:bg-primary selection:text-white">
 
@@ -39,14 +36,14 @@
             </button>
         </div>
 
-        <div class="p-3 border-b border-border bg-zinc-900/50">
+        <div class="p-3 border-b border-border">
             <div class="space-y-2">
-                <details class="group bg-zinc-900/40 border border-zinc-800 rounded-lg overflow-hidden transition-all duration-300 open:ring-1 open:ring-primary/20">
-                    <summary class="list-none flex justify-between items-center cursor-pointer p-3 bg-zinc-800/30 hover:bg-zinc-800/80 transition-colors select-none">
-                        <span class="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Capítulo Único</span>
+                <details class="group bg-zinc-900/20 border border-zinc-800 rounded-lg overflow-hidden transition-all duration-300">
+                    <summary class="list-none flex justify-between items-center cursor-pointer p-3 bg-transparent hover:bg-zinc-800/50 transition-colors select-none">
+                        <span class="text-[10px] font-bold text-zinc-400 uppercase tracking-wider group-hover:text-purple-400">Capítulo Único</span>
                         <svg class="w-3 h-3 text-zinc-500 transition-transform duration-300 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
                     </summary>
-                    <div class="p-3 space-y-3 border-t border-zinc-800/50">
+                    <div class="p-3 space-y-3 border-t border-zinc-800 bg-black/20">
                         <div class="flex justify-between items-center h-4">
                             <span class="text-[9px] text-zinc-600">Cole o link abaixo</span>
                             <span id="loading-indicator" class="text-[9px] text-primary hidden animate-pulse font-bold">Processando...</span>
@@ -66,7 +63,7 @@
 
                 <details class="group bg-zinc-900/20 border border-zinc-800 rounded-lg overflow-hidden transition-all duration-300">
                     <summary class="list-none flex justify-between items-center cursor-pointer p-3 bg-transparent hover:bg-zinc-800/50 transition-colors select-none">
-                        <span class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider group-hover:text-purple-400">Obra Completa</span>
+                        <span class="text-[10px] font-bold text-zinc-400 uppercase tracking-wider group-hover:text-purple-400">Obra Completa</span>
                         <svg class="w-3 h-3 text-zinc-600 transition-transform duration-300 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
                     </summary>
                     <div class="p-3 space-y-3 border-t border-zinc-800 bg-black/20">
@@ -147,6 +144,6 @@
 
         </div>
     </main>
-    <script src="scripts/script.js"></script>
+    <script src="src/script.js"></script>
 </body>
 </html>

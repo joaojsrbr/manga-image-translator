@@ -13,7 +13,7 @@ puppeteer.use(StealthPlugin());
 dotenv.config();
 
 
-const DIR_NAME = path.join(__dirname.replace("\\server",""))
+const DIR_NAME = path.join(__dirname.replace("\\src",""))
 
 const app = express();
 app.use(cors());
@@ -416,7 +416,7 @@ app.post('/translate', async (req, res) => {
 
             if (!fsSync.existsSync(outputDir)) fsSync.mkdirSync(outputDir, { recursive: true });
 
-            const command = `"${VENV_PATH}" && set GEMINI_API_KEY=${API_KEY} && python -m manga_translator local -v --ignore-errors --config-file tradutor/config/configv1.json -v -i "${inputDir}" -o "${outputDir}" --overwrite`;
+            const command = `"${VENV_PATH}" && set GEMINI_API_KEY=${API_KEY} && python -m manga_translator local --use-gpu -v --ignore-errors --config-file tradutor/config/configv1.json -v -i "${inputDir}" -o "${outputDir}" --overwrite`;
 
             log('INFO', `Iniciando IA de Tradução (${translator})...`, 0);
             
