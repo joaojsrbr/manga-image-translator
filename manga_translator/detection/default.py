@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import cv2
 import einops
-from typing import List, Tuple
+# from typing import List, Tuple
 
 from .default_utils.DBNet_resnet34 import TextDetection as TextDetectionDefault
 from .default_utils import imgproc, dbnet_utils, craft_utils
@@ -17,10 +17,7 @@ def det_batch_forward_default(batch: np.ndarray, device: str):
     if isinstance(batch, list):
         batch = np.array(batch)
     batch = einops.rearrange(batch.astype(np.float32) / 127.5 - 1.0, 'n h w c -> n c h w')
-    
-    # Move o batch para o dispositivo (seja ele CUDA, MPS ou DirectML)
     batch = torch.from_numpy(batch).to(device)
-    
     with torch.no_grad():
         db, mask = MODEL(batch)
         db = db.sigmoid().cpu().numpy()
@@ -44,19 +41,11 @@ class DefaultDetector(OfflineDetector):
 
     async def _load(self, device: str):
         self.model = TextDetectionDefault()
-        
-        # Carrega os pesos sempre na CPU primeiro para evitar erro de backend desconhecido
         sd = torch.load(self._get_file_path('detect-20241225.ckpt'), map_location='cpu')
         self.model.load_state_dict(sd['model'] if 'model' in sd else sd)
         self.model.eval()
         self.device = device
-        
-        # --- CORREÇÃO PARA AMD (DIRECTML) ---
-        # O código original tinha: if device == 'cuda' or device == 'mps':
-        # Isso impedia que o modelo fosse movido para a GPU se fosse DirectML.
-        # Agora movemos incondicionalmente, pois .to() lida bem com todos os tipos.
         self.model = self.model.to(self.device)
-            
         global MODEL
         MODEL = self.model
 
