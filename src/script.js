@@ -14,8 +14,23 @@ let estadoAtual = {
 window.onload = () => {
     carregarBiblioteca(true);
     setupAtalhos();
-    setInterval(() => { carregarBiblioteca(false); }, 20000);
+    // setInterval(() => { carregarBiblioteca(false); }, 20000);
 };
+
+
+function filtrarBiblioteca() {
+    const termo = document.getElementById('libraryFilter').value.toLowerCase();
+    const items = document.querySelectorAll('#libraryList details');
+    
+    items.forEach(item => {
+        const title = item.getAttribute('data-name');
+        if (title.includes(termo)) {
+            item.classList.remove('hidden');
+        } else {
+            item.classList.add('hidden');
+        }
+    });
+}
 
 
 async function pedirSugestoesIA() {
@@ -151,68 +166,199 @@ function mudarPagina(delta) {
     }
 }
 
-
 async function carregarBiblioteca(log) {
     const listEl = document.getElementById('libraryList');
+    
+    // 1. SALVAR O ESTADO: Guarda os nomes das obras que estão abertas (details com atributo 'open')
+    const obrasAbertas = new Set();
+    listEl.querySelectorAll('details[open]').forEach(det => {
+        const name = det.getAttribute('data-name');
+        if (name) obrasAbertas.add(name);
+    });
+
     try {
         const res = await fetch(`${API_URL}/library`);
         const library = await res.json();
-        listEl.innerHTML = '';
-        if (library.length === 0) { listEl.innerHTML = `<div class="text-center mt-10 text-zinc-600 text-xs">Vazio.</div>`; return; }
-        document.getElementById('selector').value = "#readerarea img";
-        document.getElementById('seriesSelector').value = "#chapterlist a";
+        listEl.innerHTML = ''; // Limpa a lista visual
+        
+        if (library.length === 0) { 
+            listEl.innerHTML = `<div class="text-center mt-10 text-zinc-600 text-xs">Vazio.</div>`; 
+            return; 
+        }
+
+        const selEl = document.getElementById('selector');
+        if(selEl) selEl.value = "#readerarea img";
+
         library.forEach(obra => {
             const cleanName = obra.name.replace(/_/g, ' ');
+            const dataNameValue = cleanName.toLowerCase(); // Chave para verificar se estava aberto
+            
             const details = document.createElement('details');
+            details.setAttribute('data-name', dataNameValue);
+            
+            // 2. RESTAURAR O ESTADO: Se estava aberto antes, forçamos a abrir agora
+            if (obrasAbertas.has(dataNameValue)) {
+                details.open = true;
+            }
+
             details.className = "group mb-1 overflow-hidden rounded-lg border border-transparent open:border-zinc-800 open:bg-zinc-900/30 transition-all";
+            
             const summary = document.createElement('summary');
             summary.className = "cursor-pointer p-2 flex items-center justify-between text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 rounded transition-colors text-xs font-medium select-none";
-            summary.innerHTML = `<div class="flex flex-col overflow-hidden"><div class="flex items-center gap-2"><svg class="w-3 h-3 transition-transform group-open:rotate-90 text-zinc-600 group-hover:text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg><span class="truncate capitalize" title="${cleanName}">${cleanName}</span></div><span class="text-[9px] text-zinc-600 ml-5 truncate" title="${obra.domain}">${obra.domain}</span></div><span class="text-[9px] bg-zinc-800 text-zinc-500 px-1.5 py-px rounded ml-2">${obra.chapters.length}</span>`;
+            summary.innerHTML = `
+                <div class="flex flex-col overflow-hidden">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-3 h-3 transition-transform group-open:rotate-90 text-zinc-600 group-hover:text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                        <span class="truncate capitalize" title="${cleanName}">${cleanName}</span>
+                    </div>
+                    <span class="text-[9px] text-zinc-600 ml-5 truncate" title="${obra.domain}">${obra.domain}</span>
+                </div>
+                <span class="text-[9px] bg-zinc-800 text-zinc-500 px-1.5 py-px rounded ml-2">${obra.chapters.length}</span>
+            `;
+
+            // Menu de ações (Traduzir Tudo / Deletar)
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = "px-2 py-2 flex gap-2 border-b border-zinc-800/50 bg-black/10";
+            actionsDiv.innerHTML = `
+                <button onclick="traduzirObraCompleta('${obra.domain}', '${obra.name}')" class="flex-1 text-[9px] bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 hover:text-indigo-300 border border-indigo-500/20 rounded py-1 transition flex items-center justify-center gap-1">
+                    <span>✨</span> Traduzir Tudo
+                </button>
+                <button onclick="excluirObraInteira('${obra.domain}', '${obra.name}')" class="px-2 text-[9px] bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/20 rounded py-1 transition" title="Deletar Obra Inteira">
+                    🗑️
+                </button>
+            `;
+
             const ul = document.createElement('ul');
             ul.className = "pt-1 pb-2 px-2 space-y-1 bg-black/20";
             
             obra.chapters.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 
-            
-
             obra.chapters.forEach(cap => {
                 const li = document.createElement('li');
-                
-                
                 const safeObra = obra.name.replace(/\s+/g, '_');
                 const safeCap = cap.name.replace(/\./g, '-');
                 const elementId = `chap-${obra.domain}-${safeObra}-${safeCap}`;
                 li.id = elementId;
 
-                
-                const baseClass = "fade-in rounded p-2 flex flex-col gap-2 group/item transition-all border";
-                
                 const isCurrent = estadoAtual.obra === obra.name && estadoAtual.capitulo === cap.name;
                 
+                // Lógica visual dos botões (baseada no sistema de Lock File do passo anterior)
+                let transBtnHtml;
+                if (cap.isTranslating) {
+                    transBtnHtml = `<button onclick="abrirCapitulo('${obra.domain}', '${obra.name}', '${cap.name}', 'translated')" class="flex-1 text-[10px] py-1 rounded transition border bg-yellow-500/10 hover:bg-yellow-500/20 border-yellow-500/30 text-yellow-500 hover:text-yellow-300 font-semibold flex items-center justify-center gap-2 animate-pulse" title="Clique para ver o progresso"><svg class="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Traduzindo...</button>`;
+                } else if (cap.hasTranslation) {
+                    transBtnHtml = `<button onclick="abrirCapitulo('${obra.domain}', '${obra.name}', '${cap.name}', 'translated')" class="flex-1 text-[10px] py-1 rounded transition border bg-primary/10 hover:bg-primary/20 border-primary/30 text-primary hover:text-white font-semibold">Ler Traduzido</button>`;
+                } else {
+                    transBtnHtml = `<button onclick="traduzirCapitulo(this, '${obra.domain}', '${obra.name}', '${cap.name}')" class="btn-translate flex-1 text-[10px] py-1 rounded transition border bg-zinc-900 hover:bg-primary hover:text-white border-zinc-700 text-zinc-400 font-medium flex justify-center items-center gap-1 group/trans" data-cap="${cap.name}"><span>✨</span> Traduzir</button>`;
+                }
+
+                // Estilos do item da lista
+                const baseClass = "fade-in rounded p-2 flex flex-col gap-2 group/item transition-all border";
                 const activeClass = "bg-primary/10 border-primary shadow-[0_0_15px_rgba(139,92,246,0.15)] ring-1 ring-primary/30";
                 const inactiveClass = "bg-zinc-800/40 hover:bg-zinc-800 border-zinc-700/50 hover:border-zinc-600";
-
                 li.className = `${baseClass} ${isCurrent ? activeClass : inactiveClass}`;
 
-                
-                let transBtnHtml = cap.hasTranslation 
-                    ? `<button onclick="abrirCapitulo('${obra.domain}', '${obra.name}', '${cap.name}', 'translated')" class="flex-1 text-[10px] py-1 rounded transition border bg-primary/10 hover:bg-primary/20 border-primary/30 text-primary hover:text-white font-semibold">Ler Traduzido</button>`
-                    : `<button onclick="traduzirCapitulo(this, '${obra.domain}', '${obra.name}', '${cap.name}')" class="flex-1 text-[10px] py-1 rounded transition border bg-zinc-900 hover:bg-primary hover:text-white border-zinc-700 text-zinc-400 font-medium flex justify-center items-center gap-1 group/trans"><span>✨</span> Traduzir</button>`;
-                
-                li.innerHTML = `<div class="flex justify-between items-center"><div class="flex items-center gap-1.5"><div class="w-1 h-1 rounded-full ${cap.hasTranslation ? 'bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.5)]' : 'bg-zinc-600'}"></div><span class="text-[10px] font-bold text-zinc-400 uppercase tracking-wide group-hover/item:text-zinc-200 transition-colors">Cap. ${cap.name}</span></div><button onclick="excluirCapitulo(event, '${obra.domain}', '${obra.name}', '${cap.name}')" class="text-zinc-600 hover:text-red-400 transition opacity-0 group-hover/item:opacity-100 p-1" title="Apagar"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button></div><div class="flex gap-1.5"><button onclick="abrirCapitulo('${obra.domain}', '${obra.name}', '${cap.name}', 'original')" class="flex-1 text-[10px] py-1 rounded bg-zinc-900 hover:bg-zinc-700 text-zinc-400 hover:text-white border border-zinc-700 transition">Original</button>${transBtnHtml}</div>`;
-                
+                li.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <div class="flex items-center gap-1.5">
+                            <div class="w-1 h-1 rounded-full ${cap.hasTranslation ? 'bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.5)]' : 'bg-zinc-600'}"></div>
+                            <span class="text-[10px] font-bold text-zinc-400 uppercase tracking-wide group-hover/item:text-zinc-200 transition-colors">Cap. ${cap.name}</span>
+                        </div>
+                        <button onclick="excluirCapitulo(event, '${obra.domain}', '${obra.name}', '${cap.name}')" class="text-zinc-600 hover:text-red-400 transition opacity-0 group-hover/item:opacity-100 p-1" title="Apagar Capítulo">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                    </div>
+                    <div class="flex gap-1.5">
+                        <button onclick="abrirCapitulo('${obra.domain}', '${obra.name}', '${cap.name}', 'original')" class="flex-1 text-[10px] py-1 rounded bg-zinc-900 hover:bg-zinc-700 text-zinc-400 hover:text-white border border-zinc-700 transition">Original</button>
+                        ${transBtnHtml}
+                    </div>
+                `;
                 ul.appendChild(li);
             });
+
             details.appendChild(summary);
+            details.appendChild(actionsDiv);
             details.appendChild(ul);
             listEl.appendChild(details);
         });
+
+        filtrarBiblioteca(); // Reaplica o filtro de texto se houver
+
     } catch (e) {
         if (log) {
-            console.error(e); showToast('Erro ao carregar biblioteca.', 'error');
+            console.error(e); 
+            showToast('Erro ao carregar biblioteca.', 'error');
         }
     }
 }
+
+async function excluirObraInteira(domain, siteName) {
+    if (!confirm(`TEM CERTEZA? Isso apagará TODOS os capítulos de "${siteName.replace(/_/g, ' ')}".`)) return;
+
+    try {
+        const res = await fetch(`${API_URL}/delete-series`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ domain, siteName })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('Obra excluída com sucesso!', 'success');
+            // Se estava lendo essa obra, limpa a tela
+            if (estadoAtual.obra === siteName) {
+                document.getElementById('imageContainer').innerHTML = '';
+                document.getElementById('currentTitle').innerText = 'Selecione uma obra';
+            }
+            carregarBiblioteca();
+        } else {
+            showToast(data.error, 'error');
+        }
+    } catch (e) {
+        showToast('Erro ao conectar com servidor.', 'error');
+    }
+}
+
+
+async function traduzirObraCompleta(domain, siteName) {
+    // Encontra o elemento details dessa obra procurando pelo título no DOM (maneira simples)
+    // Uma abordagem mais robusta seria passar o elemento, mas vamos buscar pelos botões existentes.
+    
+    const details = Array.from(document.querySelectorAll('details')).find(d => d.getAttribute('data-name') === siteName.replace(/_/g, ' ').toLowerCase());
+    
+    if (!details) return showToast('Erro ao localizar obra na lista.', 'error');
+    
+    // Abre a lista para o usuário ver o progresso
+    details.open = true;
+
+    // Pega todos os botões de traduzir "pendentes" (que possuem a classe btn-translate que adicionei no HTML generator)
+    const pendingButtons = details.querySelectorAll('.btn-translate');
+
+    if (pendingButtons.length === 0) {
+        return showToast('Todos os capítulos já foram traduzidos!', 'success');
+    }
+
+    if (!confirm(`Deseja traduzir ${pendingButtons.length} capítulos em sequência? Isso pode demorar.`)) return;
+
+    showToast(`Iniciando fila de tradução: ${pendingButtons.length} caps.`, 'success');
+
+    // Processa em série (um por um) para não travar o backend/GPU
+    for (let i = 0; i < pendingButtons.length; i++) {
+        const btn = pendingButtons[i];
+        const capName = btn.getAttribute('data-cap');
+        
+        // Rola até o item sendo processado
+        btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // Chama a função existente de tradução e espera ela terminar
+        await traduzirCapitulo(btn, domain, siteName, capName);
+        
+        // Pequena pausa para respirar
+        await new Promise(r => setTimeout(r, 1000));
+    }
+
+    showToast('Fila de tradução finalizada!', 'success');
+}
+
 
 function destacarCapituloAtual() {
     
@@ -293,21 +439,47 @@ async function baixarCapitulo() {
 }
 
 async function traduzirCapitulo(btnElement, domain, siteName, chapterName) {
-    const originalText = btnElement.innerHTML;
+    const originalContent = btnElement.innerHTML;
     
-    const translatorEngine = 'gemini';
+    // Ícone de "Aguardando" (Relógio ou Spinner)
+    btnElement.innerHTML = `<svg class="animate-spin h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
     btnElement.disabled = true;
-    btnElement.innerHTML = `<svg class="animate-spin h-3 w-3 text-white mr-1" ...></svg> Traduzindo...`;
-    showToast(`Iniciando tradução...`, 'success');
+
+    // Verifica status da fila para dar feedback ao usuário
     try {
-        const res = await fetch(`${API_URL}/translate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ domain, siteName, chapterName, translator: translatorEngine })
-        });
+        const qRes = await fetch(`${API_URL}/queue-status`);
+        const qData = await qRes.json();
+        if (qData.running) {
+            showToast(`Adicionado à fila (Posição: ${qData.length + 1})`, 'success');
+            btnElement.innerHTML = `<span class="animate-pulse">⏳ Na Fila...</span>`;
+        } else {
+            showToast(`Iniciando tradução...`, 'success');
+        }
+    } catch(e) {}
+
+    // Requisição principal (vai ficar "pendente" até o servidor processar a vez dele)
+    fetch(`${API_URL}/translate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain, siteName, chapterName, translator: 'gemini' })
+    })
+    .then(async (res) => {
         const data = await res.json();
-        if (data.success) { showToast('Tradução finalizada!', 'success'); carregarBiblioteca(); } else { showToast('Erro: ' + data.error, 'error'); btnElement.innerHTML = "Erro"; }
-    } catch (e) { showToast('Erro de conexão.', 'error'); btnElement.disabled = false; btnElement.innerHTML = originalText; }
+        if (data.success) {
+            showToast(`Capítulo ${chapterName} concluído!`, 'success');
+            carregarBiblioteca();
+        } else {
+            showToast('Erro: ' + data.error, 'error');
+            carregarBiblioteca();
+        }
+    })
+    .catch(() => {
+        showToast('Erro na conexão.', 'error');
+        carregarBiblioteca();
+    });
+
+    // Recarrega em 1s para pegar o status "isTranslating" (Lock File) e virar o botão Amarelo
+    setTimeout(() => { carregarBiblioteca(); }, 1500);
 }
 
 async function iniciarBulkDownload() {
