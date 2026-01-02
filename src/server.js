@@ -224,7 +224,7 @@ async function downloadImage(url, index, directory) {
 const FALLBACK_SELECTORS = ['#readerarea img', '.reading-content img', '.entry-content img', '.wp-manga-chapter-img', '#image-container img', '.blob_content img'];
 
 app.post('/scrape', async (req, res) => {
-    const { url, siteName, chapterName, selector } = req.body;
+    const { url, siteName, chapterName, selector, cookies } = req.body;
     const urlObj = new URL(url);
     const domain = urlObj.hostname.split('.')[0]; 
     const safeSite = siteName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
@@ -244,6 +244,16 @@ app.post('/scrape', async (req, res) => {
         await fs.mkdir(originalDir, { recursive: true });
         const browser = await getBrowser();
         page = await browser.newPage();
+
+        if (cookies && cookies.length > 0) {
+            log('INFO', 'Injetando cookies recebidos do frontend...');
+            const parsedCookies = parseCookieString(cookies, url);
+            
+            if (parsedCookies.length > 0) {
+                // Seta os cookies na página antes de navegar
+                await page.setCookie(...parsedCookies);
+            }
+        }
 
         
         await page.setRequestInterception(true);
@@ -344,24 +354,39 @@ async function processQueue() {
         // Cria o Lock File
         await fs.writeFile(lockFilePath, 'translating');
 
-        // Salva config (se necessário)
-        // ... (lógica simplificada para economizar espaço, o translate original tinha isso) ...
-
         const inputDir = path.join(chapterPath, 'original');
         const outputDir = path.join(chapterPath, 'traduzido');
         if (!fsSync.existsSync(outputDir)) fsSync.mkdirSync(outputDir, { recursive: true });
+        
+        // AO USAR COM GEMINI
+        // troque o "translator": "custom_openai" para "translator": "gemini",
+        // const command = [
+        //     `"${VENV_PATH}"`,
+        //     `&& set GEMINI_API_KEY=${GEMINI_API_KEY}`,
+        //     `&& python -m manga_translator local`,
+        //     // `--use-gpu`,
+        //     `-v --ignore-errors`,
+        //     `--config-file "tradutor/config/configv1.json"`,
+        //     `-i "${inputDir}"`,
+        //     `-o "${outputDir}"`,
+        //     `--overwrite`
+        // ].join(" ");
 
+        // USING OLLAMA
+        // ollama create manga-translator -f Modelfile
         const command = [
             `"${VENV_PATH}"`,
-            `&& set GEMINI_API_KEY=${GEMINI_API_KEY}`,
             `&& python -m manga_translator local`,
-            `--use-gpu -v --ignore-errors`,
-            `--config-file "tradutor/config/configv1.json"`,
+            // `--use-gpu`,
+            `--ignore-errors`,
+            `--config-file "tradutor/config/config-ollama.json"`,
+            `-v`,
             `-i "${inputDir}"`,
             `-o "${outputDir}"`,
             `--overwrite`
         ].join(" ");
 
+        log(command);
         log('INFO', `[FILA] Iniciando: ${siteName} - Cap ${chapterName} (Restam: ${translationQueue.length - 1})`);
 
         await new Promise((resCmd, rejCmd) => {
@@ -525,6 +550,32 @@ app.delete('/delete-chapter', async (req, res) => {
         }
     } catch (error) { res.status(500).json({ success: false, error: 'Erro ao excluir.' }); }
 });
+
+
+function parseCookieString(cookieString, domainUrl) {
+    if (!cookieString) return [];
+    
+    const domain = new URL(domainUrl).hostname;
+    const cookiesArr = [];
+    
+    // Separa a string "key=value; key2=value2"
+    cookieString.split(';').forEach(pair => {
+        const parts = pair.split('=');
+        if (parts.length >= 2) {
+            const name = parts[0].trim();
+            // Junta o resto caso o valor tenha "="
+            const value = parts.slice(1).join('=').trim(); 
+            
+            cookiesArr.push({
+                name: name,
+                value: value,
+                domain: domain, // Importante: associa o cookie ao domínio correto
+                path: '/'
+            });
+        }
+    });
+    return cookiesArr;
+}
 
 app.listen(PORT, () => {
     log('SUCCESS', `Servidor rodando em http://localhost:${PORT}`);
